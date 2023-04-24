@@ -1,0 +1,50 @@
+import { EventDto } from '../dto/event.dto';
+import { DeleteEventDto } from '../dto/request/deleteEvent.dto';
+import { eventsByRole, HistorialEventosCreadosDto } from '../dto/response/historialEventoDto';
+import { UpdateEventDTO } from '../dto/request/updateEvent.dto';
+import { registerOrganizersResponseDto } from '../dto/response/registerOrganizersResponse.dto';
+import { registerOrganizersDto } from '../dto/request/registerOrganizers.dto';
+import { DeleteOrganizerDto } from '../dto/request/deleteOrganizer.dto';
+import { GetMyEventDTO } from '../dto/response/getMyEvent.dto';
+import { ChangeStateDto } from '../dto/changeState.dto';
+import { UpdatePermissionsRole } from '../../../auth/dto/updatePermissionsRole.dto';
+import { UpdatePermissionsParticipants } from '../../../auth/dto/updatePermissionsParticipants.dto';
+import { getEventToAddServiceDto } from '../dto/response/getEventToAddService.dto';
+import { TemplateDto } from '../dto/template.dto';
+import { TypeEventDto } from '../dto/typeEvent.dto';
+import { GetEventInfoDto } from '../dto/response/getEventInfo.dto';
+import { CreateEventDTO } from '../dto/request/createEvent.dto';
+import { PastHistorialEventsDTO } from '../dto/response/historialEventPast.dto';
+
+export interface EventServiceInterface {
+  createEvent(event: CreateEventDTO, jwt: string): Promise<boolean>;
+  deleteEvent(deleteEvent: DeleteEventDto, jwt: string): Promise<boolean>;
+  getMyEvents(jwt: string): Promise<eventsByRole[]>;
+  updateEvent(jwt:string, updatedEvent:UpdateEventDTO):Promise<boolean>;
+  getEvent(event_id: string, jwt: string): Promise<GetMyEventDTO>;
+  getEventInfo(event_id:string): Promise<GetEventInfoDto>;
+  registerOrganizers(organizer: registerOrganizersDto, jwt: string): Promise<boolean>;
+  deleteOrganizer(deleteOrganizer: DeleteOrganizerDto, jwt: string): Promise<boolean>;
+  getEventsHistorialWithFilters(jwt: string, role: string, name: string, dateFrom: string, dateTo: string, quiet: string): Promise<PastHistorialEventsDTO[]>;
+  startEvent(changeState: ChangeStateDto, jwt): Promise<boolean>;
+  endEvent(changeState: ChangeStateDto, jwt): Promise<boolean>;
+  endPostEvent(changeState: ChangeStateDto): Promise<boolean>;
+  delayEvent(changeState: ChangeStateDto, jwt): Promise<boolean>;
+  suspendEvent(changeState: ChangeStateDto, jwt): Promise<boolean>;
+  cancelEvent(changeState: ChangeStateDto, jwt): Promise<boolean>;
+  resumeEvent(changeState: ChangeStateDto): Promise<boolean>;
+  reorganizeEvent(changeState: ChangeStateDto): Promise<boolean>;
+  generateInvitationLink(jwt:string, event_id:string): Promise<string>;
+  udpateRolePermissions(jtw:string, updatePermissionsDto: UpdatePermissionsRole): Promise<boolean>;
+  updateParticipantsPermissions(jwt:string, updatePermissionsDto: UpdatePermissionsParticipants): Promise<boolean>;
+  getEventsToAddService(jwt: string): Promise<getEventToAddServiceDto[]>;
+  getTemplates(): Promise<TemplateDto[]>;
+  createTemplate(template: TemplateDto): Promise<boolean>;
+  getEventTypes(): Promise<TypeEventDto[]>
+  getEventByHash(hash:string): Promise<string>;
+  getAllPermissionsInEvent(jwt:string, event_id:string);
+  getPublicEvents(ciudad: string, provincia: string, tipo: string, fecha: string, hora: string, nombre: string, skip, limit): Promise<HistorialEventosCreadosDto[]>;
+  createTemplateByUser(template: TemplateDto, jwt: string): Promise<boolean>;
+  getUserTemplates(jwt: string): Promise<TemplateDto[]>;
+  getEventOrganizers(event_id: string, jwt);
+}

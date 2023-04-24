@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html
+  lang="en"
+  xmlns="http://www.w3.org/1999/xhtml"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title></title>
+    <style>
+      table,
+      td,
+      div,
+      h1,
+      p {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+          'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+          'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      @media screen and (max-width: 530px) {
+        .unsub {
+          display: block;
+          padding: 8px;
+          margin-top: 14px;
+          border-radius: 6px;
+          background-color: #555555;
+          text-decoration: none !important;
+          font-weight: bold;
+        }
+        .col-lge {
+          max-width: 100% !important;
+        }
+      }
+      @media screen and (min-width: 531px) {
+        .col-sml {
+          max-width: 27% !important;
+        }
+        .col-lge {
+          max-width: 73% !important;
+        }
+      }
+    </style>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      word-spacing: normal;
+      background-color: #939297;
+    "
+  >
+    <div
+      role="article"
+      aria-roledescription="email"
+      lang="en"
+      style="
+        text-size-adjust: 100%;
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+        background-color: #eff0f3;
+      "
+    >
+      <table
+        role="presentation"
+        style="width: 100%; border: none; border-spacing: 0"
+      >
+        <tr>
+          <td style="padding: 0">
+            <table
+              role="presentation"
+              style="
+                width: 94%;
+                max-width: 600px;
+                border: none;
+                border-spacing: 0;
+                text-align: left;
+                font-family: Arial, sans-serif;
+                font-size: 16px;
+                line-height: 22px;
+                color: #363636;
+                margin: 0 auto;
+              "
+            >
+              <tr>
+                <td
+                  style="
+                    padding: 40px 30px 30px 30px;
+                    text-align: center;
+                    font-size: 24px;
+                    font-weight: bold;
+                  "
+                >
+                  <a href="" style="text-decoration: none"
+                    ><img
+                      src="https://i.imgur.com/oatZt6o.png"
+                      width="165"
+                      alt="Logo"
+                      style="
+                        width: 480px;
+                        max-width: 80%;
+                        height: auto;
+                        border: none;
+                        text-decoration: none;
+                        color: #fffffe;
+                      "
+                  /></a>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 30px 30px 0px 30px; background-color: #fffffe">
+                  <h1
+                    style="
+                      margin-top: 0;
+                      margin-bottom: 16px;
+                      font-size: 26px;
+                      line-height: 32px;
+                      font-weight: bold;
+                      letter-spacing: -0.02em;
+                    "
+                  >
+                    ¡Agregaron tu servicio {{SERVICE_NAME}} a un evento!
+                  </h1>
+                  <p style="margin: 0">¡Hola, {{NAME}}!</p>
+                </td>
+              </tr>
+              <tr>
+                <td
+                  style="
+                    padding: 0px 30px 11px 30px;
+                    font-size: 0;
+                    background-color: #fffffe;
+                    border-bottom: 1px solid #f0f0f5;
+                    border-color: rgba(201, 201, 207, 0.35);
+                  "
+                >
+                  <div
+                    class="col-sml"
+                    style="
+                      display: inline-block;
+                      width: 100%;
+                      max-width: 145px;
+                      vertical-align: top;
+                      text-align: left;
+                      font-family: Arial, sans-serif;
+                      font-size: 14px;
+                      color: #363636;
+                    "
+                  >
+                    <img
+                      src="https://i.imgur.com/BxpbV8U.png"
+                      width="115"
+                      alt=""
+                      style="width: 115px; max-width: 80%; margin-bottom: 20px"
+                    />
+                  </div>
+                  <div
+                    class="col-lge"
+                    style="
+                      display: inline-block;
+                      width: 100%;
+                      max-width: 395px;
+                      vertical-align: top;
+                      padding-bottom: 20px;
+                      font-family: Arial, sans-serif;
+                      font-size: 16px;
+                      line-height: 22px;
+                      color: #363636;
+                    "
+                  >
+                    <p style="margin-top: 0; margin-bottom: 16px">
+                      {{EVENT_TITLE}}
+                    </p>
+                    <p style="margin-top: 0; margin-bottom: 18px">
+                      El evento será el día: {{EVENT_START_DATE}}
+                    </p>
+                    <p style="margin-top: 0; margin-bottom: 18px">
+                      El evento comenzará: {{EVENT_START_TIME}}
+                    </p>
+                    <p style="margin-top: 0; margin-bottom: 18px">
+                      Usted se presentará el día: {{DATE_SERVICE}}
+                    </p>
+                    <p style="margin-top: 0; margin-bottom: 18px">
+                      Usted se presentará a la hora: {{TIME_SERVICE}}
+                    </p>
+                    <p style="margin-top: 0; margin-bottom: 18px">
+                    Para confirmar, por favor haga click en el siguiente botón:
+                    </p>
+                    <p style="margin: 0">
+                      <a
+                        href={{response}}
+                        style="
+                          background: #ff8e3c;
+                          text-decoration: none;
+                          padding: 10px 25px;
+                          color: #0d0d0d;
+                          border-radius: 4px;
+                          display: inline-block;
+                        "
+                        ><span style="font-weight: bold"
+                          >Confirmar servicio</span
+                        >
+                      </a>
+                    </p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 30px; background-color: #fffffe; text-align: center;">
+                  <p style="margin-top: 0; margin-bottom: 18px ">
+                    <i>Por favor, ignorar este correo si usted lo recibió por error.<i>
+                  </p>
+                  <p style="margin: 0">
+                  Eventually
+                  <br/>
+                  Questions? Call 0351 5488701
+                  <br/>
+                    <a
+                      class="unsub"
+                      href=""
+                      style="color: #ff8e3c; text-decoration: underline">
+                      Terms of Use
+                    </a>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td
+                  style="
+                    padding: 30px;
+                    text-align: center;
+                    font-size: 12px;
+                    background-color: #404040;
+                    color: #cccccc;
+                  "
+                >
+                  <p style="margin: 0 auto; display: inline;">
+                    <a
+                      href="http://www.facebook.com/"
+                      style="text-decoration: none"
+                      ><img
+                        src="https://i.imgur.com/Coa2VGm.png"
+                        width="30"
+                        height="30"
+                        alt="f"
+                        style="display: inline-block; color: #cccccc"
+                    /></a>
+                    <a
+                      href="https://www.instagram.com/"
+                      style="text-decoration: none"
+                      ><img
+                        src="https://i.imgur.com/dozcOR9.png"
+                        width="30"
+                        height="30"
+                        alt="t"
+                        style="display: inline-block; color: #cccccc"
+                    /></a>
+                  </p>
+                  <p style="margin: 0; font-size: 14px; line-height: 20px">
+                    &reg; Eventually, Argentina 2023<br/><a
+                      class="unsub"
+                      href=""
+                      style="color: #ff8e3c; text-decoration: underline"
+                      >Eventually</a
+                    >
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,584 @@
+private async generateExpensesSummary(event: EventDto, userCollection) : Promise<GetExpensesSummaryDto> {
+      let expensesSummary: GetExpensesSummaryDto = new GetExpensesSummaryDto();
+      
+      expensesSummary.total = event.expensesSummary.total;
+      expensesSummary.debtOfEach = event.expensesSummary.debtOfEach;
+      expensesSummary.transactions = [];
+
+      let participantsUser = [];
+      let participantsData: SubscriberInExpenseDTO[] = [];
+
+      for (const guest of event.expensesSummary.summaryXGuest) {
+        participantsUser.push(new ObjectId(guest.user_id));
+      }
+
+      participantsData = await userCollection.
+      aggregate([
+        {
+          '$match': {
+            '_id': { $in: participantsUser }
+          }
+        },
+        {
+          '$project': {
+            '_id': 0,
+            'username': '$username',
+            'name': '$name',
+            'lastname': '$name',
+            'user_id': '$_id',
+            'small_photo': '$small_photo'
+          }
+        }]).toArray();
+
+
+      for (const guest of event.expensesSummary.summaryXGuest) {
+        let getGuestExpensesSummary: GetGuestExpensesSummaryDto = new GetGuestExpensesSummaryDto();
+        
+        const user = participantsData.find((x) => x.user_id.equals(guest.user_id));
+
+        getGuestExpensesSummary.guest = user;
+        getGuestExpensesSummary.amountSpent = guest.amountSpent;
+        getGuestExpensesSummary.debt = guest.debt;
+        getGuestExpensesSummary.balance = guest.balance;
+        getGuestExpensesSummary.transactions = [];
+
+        for (const transaction of guest.transactions) {
+          const origin = participantsData.find((x) => x.user_id.equals(transaction.origin));
+          const recipient = participantsData.find((x) => x.user_id.equals(transaction.recipient));
+
+          let getTransaction: GetTransacitionDto = new GetTransacitionDto(origin, recipient, transaction.amount, transaction.complete);
+
+          getGuestExpensesSummary.transactions.push(getTransaction);
+
+          const trans = expensesSummary.transactions.find((x) => x.origin.user_id.equals(getTransaction.origin.user_id) && x.recipient.user_id.equals(getTransaction.recipient.user_id));
+
+          if (isEmptyOrNullField(trans)) expensesSummary.transactions.push(getTransaction);
+        }
+
+        expensesSummary.summaryXGuest.push(getGuestExpensesSummary);
+      }
+
+      return expensesSummary;
+    }
+
+    async deleteAnyActivity(activities, deleteActivity: DeleteActivityDto, eventCollection): Promise<boolean>{
+    const activity = activities.find((x) => x.activity_id === deleteActivity.activity_id);
+    if(isNullField(activity)) throw new BadRequestException('La actividad seleccionada no está incluida en el evento.');
+    activities = activities.filter((x) => x !== activity);
+    try{
+      const result = await eventCollection.updateOne(
+        { _id: new ObjectId(deleteActivity.event_id) },
+        { $set: {"activities": activities} },
+      );
+      return true;
+    } catch(err){
+      throw new BadRequestException(err);
+    }
+  }
+
+  async deleteOwnActivity(activities, user_id:string, deleteActivity: DeleteActivityDto, eventCollection): Promise<boolean>{
+    const activity = activities.find((x) => x.activity_id === deleteActivity.activity_id);
+    if(activity.in_charge){
+      if(new ObjectId(user_id).equals(activity.in_charge)){
+        activities = activities.filter((x) => x !== activity);
+        const result = await eventCollection.updateOne(
+          { _id: new ObjectId(deleteActivity.event_id) },
+          { $set: {"activities": activities} },
+        );
+        return true;
+      } else{
+        throw new BadRequestException('La actividad no le pertenece al usuario.')
+      }
+    };
+  }
+
+  async registerInChargeActivity(registerInChargeActivity: RegisterInChargeActivityDto, jwt: string): Promise<boolean> {
+    const user_id = decodeJWT(jwt).sub;
+    let db, result;
+
+    db = await this.conectionRepository.conectionToDb();
+    const collection = db.collection('Events');
+
+    const event = await this.eventServiceInterface.getEvent(user_id, registerInChargeActivity.event_id);
+    
+    if (event.state == 'canceled' || event.state == 'finalized')
+      throw new BadRequestException('No se puede registrar el responsable de una actividad de un evento que está ' + event.state == 'canceled' ? 'cancelado.' : 'finalizado.', 'event.activities');
+
+    if(isEmptyOrNullField(event.role_permissions)) throw new BadRequestException('El usuario no posee ningun permiso permitido para realizar esta acción.');
+    if(event.role_permissions.REGISTER_IN_CHARGE_ACTIVITY !== true) throw new BadRequestException('No posee los permisos necesarios para realizar esta acción.');
+
+    const activity = event.activities.find((x) => x.activity_id === registerInChargeActivity.activity_id);
+
+    if (isNullField(activity)) throw new BadRequestException('La actividad ingresada no existe.');
+
+    let guest
+    if (event.guests) {
+      guest = event.guests.find((x) => new ObjectId(registerInChargeActivity.in_charge).equals(x.user_id));
+    }
+
+    if (!isNullField(guest) && guest.accepted === false) throw new BadRequestException('El invitado seleccionado como responsable no aceptó la invitación al evento.');
+
+    let organizer
+    if (event.organizers){
+      organizer = event.organizers.find((x) => new ObjectId(registerInChargeActivity.in_charge).equals(x.user_id));
+    }
+
+    if (isNullField(guest) && isNullField(organizer) && !new ObjectId(registerInChargeActivity.in_charge).equals(event.creator.user_id))
+      throw new BadRequestException('La persona que se intenta poner como resposable no pertenece al evento.');
+
+    activity.in_charge = new ObjectId(registerInChargeActivity.in_charge);
+
+    try {
+      result = await collection.updateOne(
+        { _id: new ObjectId(registerInChargeActivity.event_id), 'activities.activity_id':activity.activity_id },
+        { $set: {'activities.$.in_charge': activity.in_charge} },
+      );
+      return true;
+    }
+    catch (err) {
+      throw new BadRequestException(err);
+    }
+    }
+
+    async completeAnyActivity(event_id, activity_id, check_id,eventCollection, token): Promise<boolean>{
+    const activity = await this.getActivity(event_id, activity_id, token);
+    this.validateCompleteActivityDto(event_id, activity_id, check_id)
+    
+    const update = await eventCollection.update(
+      {_id: new ObjectId(event_id), 'activities.activity_id': activity.activity_id},
+      { $set: { 'activities.$.complete': true } }
+    );
+    if (update.modifiedCount !== 0) return true;
+    return false;
+  }
+
+  async completeOwnActivity(user_id, event_id, activity_id, check_id,eventCollection, token): Promise<boolean>{
+    const activity = await this.getActivity(event_id, activity_id, token);
+    const activityResponsibleId = activity.in_charge ? activity.in_charge.user_id : "";
+
+    const isActivityResponsible = new ObjectId(user_id).equals(activityResponsibleId);
+    if(!isActivityResponsible) throw new BadRequestException('No está a cargo de la actividad.');
+
+    this.validateCompleteActivityDto(event_id, activity_id, check_id)
+    
+    const update = await eventCollection.update(
+      {_id: new ObjectId(event_id), 'activities.activity_id': activity.activity_id},
+      { $set: { 'activities.$.complete': true } }
+    );
+    if (update.modifiedCount !== 0) return true;
+    return false;
+  }
+
+
+  private validateCompleteActivityDto(
+    event_id: string,
+    activity_id: string,
+    check_id: number,
+  ) {
+    if (isEmptyOrNullField(event_id))
+      throw new BadRequestException(
+        'El id del evento no puede estar vacío',
+        'event_id',
+      );
+
+    if (isEmptyOrNullField(activity_id))
+      throw new BadRequestException(
+        'El id de la actividad no puede estar vacío',
+        'activity_id',
+      );
+
+    if (!isEmptyOrNullField(check_id)) {
+      if (isNotValidFieldNumber(check_id.toString()))
+        throw new BadRequestException(
+          'El check_id debe ser numérico',
+          'check_id',
+        );
+    }
+  }
+
+  async updateAnyActivity(activities, activity_id, event_id, updateActivity, eventCollection, token): Promise<GetActivityDto> {
+    const activity = activities.find(
+      (x) => x.activity_id === activity_id,
+    );
+    if (isEmptyOrNullField(activity))
+      throw new BadRequestException(
+        'No se pudo encontrar la actividad ingresada.',
+      );
+
+    const activityUpdated = await this.fieldsToUpdateInActivity(
+      activity,
+      updateActivity,
+    );
+
+    this.validateFieldsToBeUpdated(activityUpdated);
+
+    activityUpdated.in_charge = activity.in_charge ? new ObjectId(activity.in_charge.user_id) : null;
+
+    await eventCollection.updateOne(
+      { _id: new ObjectId(event_id), 'activities.activity_id': activity_id },
+      { $set: { 'activities.$': activityUpdated } },
+    );
+    return this.getActivity(event_id, activity_id, token);
+  }
+
+  async updateOwnActivity(activities, activity_id, event_id, user_id, updateActivity,eventCollection, token): Promise<GetActivityDto>{
+    const activity = activities.find((x) => (x.activity_id === activity_id));
+
+    if (isEmptyOrNullField(activity))
+      throw new BadRequestException(
+        'No se pudo encontrar la actividad ingresada.',
+      );
+
+    if (!activity.in_charge) throw new BadRequestException('La actividad no tiene responsable.');
+    
+    if(activity.in_charge.user_id !== user_id) throw new BadRequestException('No es responsable de esta actividad :)');
+
+    const activityUpdated = await this.fieldsToUpdateInActivity(
+      activity,
+      updateActivity,
+    );
+
+    this.validateFieldsToBeUpdated(activityUpdated);
+
+    activityUpdated.in_charge = activity.in_charge ? new ObjectId(activity.in_charge.user_id) : null;
+
+    await eventCollection.updateOne(
+      { _id: new ObjectId(event_id), 'activities.activity_id': activity_id },
+      { $set: { 'activities.$': activityUpdated } },
+    );
+    return this.getActivity(event_id, activity_id, token);
+  }
+  //aca lo que se hacia antes era preguntar si el dato venia para actualizar se usaba ese y si no, se sustituia con el que estaba en la bd. Entonces despues, se llamaba al método de validación y ahi validaba las horas y tiempos.
+  private async fieldsToUpdateInActivity(
+    activityInEvent: UpdateActivityDTO,
+    activityToUpdate: UpdateActivityDTO,
+  ): Promise<UpdateActivityDTO> {
+    activityToUpdate.name = activityToUpdate.name
+      ? activityToUpdate.name
+      : activityInEvent.name;
+    activityToUpdate.detail = activityToUpdate.detail
+      ? activityToUpdate.detail
+      : activityInEvent.detail;
+    activityToUpdate.start_date = activityToUpdate.start_date
+      ? activityToUpdate.start_date
+      : activityInEvent.start_date;
+    activityToUpdate.start_time = activityToUpdate.start_time
+      ? activityToUpdate.start_time
+      : activityInEvent.start_time;
+    activityToUpdate.end_date = activityToUpdate.end_date
+      ? activityToUpdate.end_date
+      : activityInEvent.end_date;
+    activityToUpdate.end_time = activityToUpdate.end_time
+      ? activityToUpdate.end_time
+      : activityInEvent.end_time;
+    activityToUpdate.checklist = activityToUpdate.checklist;
+    return activityToUpdate;
+  }
+
+  async assignPermissions(event_id) {
+    const db = await this.conectionRepository.conectionToDb();
+    const eventCollection = db.collection('Events');
+    const creator_permissions = { ...CREATOR };
+    const organizer_permissions = { ...ORGANIZER };
+    const guest_permissions = { ...GUEST };
+    const service_permmissions = {...SERVICE};
+    try {
+      const permissions = await eventCollection.updateOne(
+        { _id: new ObjectId(event_id) },
+        { $set: { "CREATOR_PERMI": creator_permissions, "ORGANIZER_PERMI": organizer_permissions, "GUEST_PERMI": guest_permissions, 'SERVICE_PERMI': service_permmissions } }
+      )
+    } catch (err) {
+      throw new BadRequestException(err);
+    }
+  }
+
+  async getEvent(user_id: string, event_id: string): Promise<GetMyEventDTO> {
+    if (isNullField(event_id)) throw new BadRequestException('El event_id no debe ser nulo');
+
+    const db = await this.conectionRepository.conectionToDb();
+    const eventCollection = db.collection('Events');
+    const events = await this.getEventByEventId(
+      event_id,
+      eventCollection,
+    );
+    if (events.length) {
+      let role_permissions;
+      const userCollection = db.collection('Users');
+      const serviceCollection = db.collection('Services');
+      let userOrganizers: UserInEventDTO[] = [];
+
+      let services = [];
+      if (events[0].services) {
+        services = await this.getDataFromService(serviceCollection, events[0].services);
+
+        const isProvider = events[0].services.find(x => new ObjectId(x.provider).equals(new ObjectId(user_id)));
+        if(!isEmptyOrNullField(isProvider)){
+          if(isProvider.permissions){
+            role_permissions = Object.assign(events[0].SERVICE_PERMI,isProvider.permissions);
+          } else{
+            role_permissions = events[0].SERVICE_PERMI;
+          }
+        }
+      };
+
+      const guests = events[0].guests !== undefined ? await this.getGuests(event_id): undefined;
+      let isGuest;
+
+      if (guests) {
+        for (let guest of guests) {
+          if (guest.user_id.equals(new ObjectId(user_id))) isGuest = guest;
+        }
+      }
+
+      if (!isEmptyOrNullField(isGuest)) {
+        if (isGuest.permissions) {
+          role_permissions = Object.assign(events[0].GUEST_PERMI, isGuest.permissions);
+        } else {
+          role_permissions = events[0].GUEST_PERMI;
+        }
+      }
+
+      if (events[0].organizers) {
+        const isOrganizer = events[0].organizers.find(x => new ObjectId(x.user_id).equals(new ObjectId(user_id)));
+        if (!isEmptyOrNullField(isOrganizer)){
+          if(isOrganizer.permissions){ 
+            role_permissions = Object.assign(events[0].ORGANIZER_PERMI, isOrganizer.permissions);
+          } else{
+            role_permissions = events[0].ORGANIZER_PERMI;
+          }
+        }
+      }
+
+      const creator = events[0].creator;
+      const creatorWithData = await this.getDataUserInEvent(creator, userCollection);
+
+      const isCreator = new ObjectId(creator).equals(new ObjectId(user_id));
+      if (isCreator)
+        role_permissions = events[0].CREATOR_PERMI;
+
+      if (events[0].organizers && role_permissions.VIEW_ORGANIZERS === true){
+        for (let organizer of events[0].organizers) {
+          const user = await this.getDataUserInEvent(organizer.user_id, userCollection);
+          if (organizer.permissions) user.permissions = organizer.permissions;
+          userOrganizers.push(user);
+        }  
+      }
+      else userOrganizers = undefined;  
+
+      let activities = []
+      if (!isNullField(events[0].activities) && events[0].activities.length > 0) {
+        activities = await this.getEventACtivitiesBYPermissions(events[0].activities, role_permissions, user_id);
+      }
+
+      let address;
+      if (events[0].address === undefined) {
+        address = undefined;
+      } 
+      else {
+        address = {
+          alias: events[0].address.alias ? events[0].address.alias : null,
+          city: events[0].address.city ? events[0].address.city : null,
+          number: events[0].address.number ? events[0].address.number : null,
+          street: events[0].address.street ? events[0].address.street : null
+        } as AddressDto;
+      }
+
+      const expenses = this.getEventExpensesByPermissions(events[0].expenses, role_permissions, user_id);
+
+      if(role_permissions.VIEW_CONSUMABLES !== true) events[0].consumables = undefined;
+
+      const event = {
+        _id: events[0]._id,
+        title: events[0].title,
+        start_date: events[0].start_date,
+        start_time: events[0].start_time,
+        end_date: events[0].end_date,
+        end_time: events[0].end_time,
+        description: events[0].description,
+        address: address,
+        creator: creatorWithData,
+        organizers: userOrganizers,
+        activities: activities,
+        consumables: events[0].consumables,
+        expenses: expenses,
+        type: events[0].type,
+        photo: events[0].event_photo ? events[0].event_photo : null,
+        guests: guests,
+        services: services.length > 0 ? services : null,
+        role_permissions: role_permissions,
+        state: events[0].state,
+        CREATOR: events[0].CREATOR_PERMI,
+        ORGANIZER: events[0].ORGANIZER_PERMI,
+        GUEST: events[0].GUEST_PERMI,
+        SERVICE: events[0].SERVICE_PERMI
+      } as unknown as GetMyEventDTO;
+      return event;
+    }
+  }
+
+  private getEventExpensesByPermissions(expenses: ExpenseDto[], permissions, user_id){
+    if(permissions.VIEW_ALL_EXPENSES === true){
+      let gastos: ExpenseDto[] = [];
+      if (expenses && expenses.length > 0){
+        for (const expense of expenses) {
+          const exp = {
+            expense_id: expense.expense_id,
+            name: expense.name,
+            description: expense.description,
+            in_charge: expense.in_charge,
+            amount: expense.amount,
+            quantifiable: expense.quantifiable,
+            total_quantity: expense.total_quantity,
+            subscribers: expense.subscribers ? expense.subscribers : [],
+            isOwn: expense.in_charge.equals(new ObjectId(user_id))
+          } as ExpenseDto;
+          gastos.push(exp);
+        }
+      }
+
+      return gastos;
+    }
+    if(permissions.VIEW_OWN_EXPENSES === true){
+      let gastos: ExpenseDto[] = [];
+      if (expenses && expenses.length > 0){
+        for (const expense of expenses) {
+          if (expense.in_charge.equals(new ObjectId(user_id))){
+            const exp = {
+              expense_id: expense.expense_id,
+              name: expense.name,
+              description: expense.description,
+              in_charge: expense.in_charge,
+              amount: expense.amount,
+              quantifiable: expense.quantifiable,
+              total_quantity: expense.total_quantity,
+              subscribers: expense.subscribers ? expense.subscribers : [],
+              isOwn: expense.in_charge.equals(new ObjectId(user_id))
+            } as ExpenseDto;
+            gastos.push(exp);
+          }
+        }
+      }
+      return gastos;
+    }
+    return undefined;
+  }
+
+  async getDataFromService(serviceCollection, services): Promise<ServiceEventDto[]> {
+    let servicesWitData = [];
+    for (let service of services) {
+      const serviceInBD = await serviceCollection.find(
+        { _id: service.service_id }
+      ).toArray();
+
+      const serv = {
+        service_id: (serviceInBD[0]._id).toHexString(),
+        name: serviceInBD[0].name,
+        type: serviceInBD[0].type,
+        accepted: service.accepted,
+        description: serviceInBD[0].description,
+        date_service: service.date_service,
+        time_service: service.time_service,
+        //provider: (service.provider).toHexString(),
+        permissions: service.permissions
+      } as ServiceEventDto;
+      servicesWitData.push(serv)
+    }
+    return servicesWitData;
+  }
+
+  async getEventACtivitiesBYPermissions(eventActivities: ActivityDto[], permissions, user_id): Promise<ActivityDto[]>{
+    if(permissions.VIEW_ALL_TASKS === true) return await this.getEventActivities(eventActivities, user_id);
+    if(permissions.VIEW_OWN_TASK === true) return await this.getOwnActivity(eventActivities, user_id);
+    return undefined;
+  }
+
+  async getEventActivities(eventActivities: ActivityDto[], user_id): Promise<ActivityDto[]> {
+    const activities = [];
+    for (const activity of eventActivities) {
+      let userInActivity: UserInCharge;
+      if (isEmptyOrNullField(activity.in_charge)) {
+        userInActivity = null;
+      } else {
+        const userInCharge = await this.getUser(activity.in_charge.toHexString());
+        userInActivity = {
+          user_id: activity.in_charge.toHexString(),
+          lastname: userInCharge.lastname,
+          name: userInCharge.name,
+          username: userInCharge.username
+        } as UserInCharge;
+      }
+      const act = {
+        activity_id: activity.activity_id,
+        name: activity.name,
+        complete: activity.complete,
+        in_charge: userInActivity,
+        checklist: activity.checklist ? activity.checklist : null,
+        start_date: activity.start_date ? activity.start_date : '',
+        start_time: activity.start_time ? activity.start_time : '',
+        end_date: activity.end_date ? activity.end_date : '',
+        end_time: activity.end_time ? activity.end_time : '',
+        isOwn: (userInActivity !== null && userInActivity.user_id === user_id) ? true : false
+      } as unknown as ActivityDto;
+      activities.push(act);
+    }
+
+    activities.sort((a, b) => new Date(a.start_date + 'T' + a.start_time).getTime() - new Date(b.start_date + 'T' + b.start_time).getTime());
+
+    return activities;
+  }
+
+  async getOwnActivity(eventActivities: ActivityDto[],user_id ): Promise<ActivityDto[]> {
+    const activities = eventActivities.filter((x) => new ObjectId(user_id).equals(x.in_charge));
+    const ownActivities = [];
+    for(let activity of activities){
+      const userInCharge = await this.getUser(activity.in_charge.toHexString());
+        const userInActivity = {
+          user_id: activity.in_charge.toHexString(),
+          lastname: userInCharge.lastname,
+          name: userInCharge.name,
+          username: userInCharge.username
+        } as UserInCharge;
+
+        const act = {
+          activity_id: activity.activity_id,
+          name: activity.name,
+          complete: activity.complete,
+          in_charge: userInActivity,
+          checklist: activity.checklist ? activity.checklist : null,
+          start_date: activity.start_date ? activity.start_date : '',
+          start_time: activity.start_time ? activity.start_time : '',
+          end_date: activity.end_date ? activity.end_date : '',
+          end_time: activity.end_time ? activity.end_time : ''
+        } as unknown as ActivityDto;
+        ownActivities.push(act);
+
+        ownActivities.sort((a, b) => new Date(a.start_date + 'T' + a.start_time).getTime() - new Date(b.start_date + 'T' + b.start_time).getTime());
+    }
+    return ownActivities;
+  }
+
+  async getUser(user_id: string): Promise<GetUserDto> {
+    let db, collection, result;
+    try {
+      db = await this.conectionRepository.conectionToDb();
+      collection = db.collection('Users');
+      result = await collection.findOne(
+        { _id: new ObjectId(user_id) }
+      )
+      const user = {
+        username: result.username,
+        name: result.name,
+        lastname: result.lastname,
+        email: result.email,
+        birthday: result.birthday,
+        gender: result.gender,
+        address: result.address,
+        profile_photo: result.small_photo ? result.small_photo : null
+      } as unknown as GetUserDto;
+
+      return user;
+    }
+    catch (err) {
+      throw new BadRequestException(err);
+    }
+  }
